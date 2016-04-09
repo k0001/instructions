@@ -29,6 +29,7 @@ module Control.Instructions
   , Ret
 
   , Program
+  , ProgramF
   , Interpreter
 
   , (:+:)
@@ -81,11 +82,13 @@ ins1 _ = \arg -> liftF (InsF (arg, id) :: InsF t (Ret t))
 
 ---
 
+type Program (xs :: [k]) = FreeT (ProgramF xs)
+
 -- | Build a sum of 'InsF' functors from each element in the list, resulting
 -- in a functor suitable for being used as a free monad.
-type family Program (xs :: [k]) :: * -> * where
-  Program '[x]      = InsF x
-  Program (x ': xs) = InsF x :+: Program xs
+type family ProgramF (xs :: [k]) :: * -> * where
+  ProgramF '[x]      = InsF x
+  ProgramF (x ': xs) = InsF x :+: ProgramF xs
 
 -- | Build a product of 'Exe's from each element in the list,
 -- resulting in a functor suitable for being used as a cofree comonad.
@@ -97,7 +100,8 @@ type family Interpreter (xs :: [k]) :: (* -> *) -> * where
 -- | Run a program with the given interpreter.
 --
 -- @
--- 'run' :: 'Monad' m => 'Interpreter' [t, ...] m -> 'FreeT' ('Program' [t, ...]) m a -> m a
+-- 'run' :: 'Monad' m => 'Interpreter' [t, ...] m -> 'Program' [t, ...] m a -> m a
+-- 'run' :: 'Monad' m => 'Interpreter' [t, ...] m -> 'FreeT' ('ProgramF' [t, ...]) m a -> m a
 -- 'run' :: 'Monad' m => ('Exe' t :*: ...) m -> 'FreeT' ('InsF' t :+: ...) m a -> m a
 -- 'run' :: 'Monad' m => 'Exe' t m -> 'FreeT' ('InsF' t) m a -> m a
 -- @
