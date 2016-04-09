@@ -20,7 +20,6 @@ module Control.Instructions
   , InsF
   , Ins
   , ins
-  , ins1
 
   , Exe
   , exe
@@ -72,13 +71,6 @@ ins
    . (MonadFree f m, InsF t :<: f, Functor f)
   => proxy t -> Arg t -> m (Ret t) -- ^
 ins _ = \arg -> liftF (inj (InsF (arg, id) :: InsF t (Ret t)))
-
--- | Construct a single instruction in the functor @'InsF' t@.
-ins1
-  :: forall proxy t m
-   . MonadFree (InsF t) m
-  => proxy t -> Arg t -> m (Ret t) -- ^
-ins1 _ = \arg -> liftF (InsF (arg, id) :: InsF t (Ret t))
 
 ---
 
