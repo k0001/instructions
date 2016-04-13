@@ -1,21 +1,17 @@
-{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Control.Instructions
-  ( run
-  , Run
+  ( Run(..)
 
   , InsF
   , Ins
@@ -32,7 +28,7 @@ module Control.Instructions
   , Interpreter
 
   , (:+:)
-  , (:*:)(..)
+  , (:*:)((:*:))
   , (:<:)
   )
 where
@@ -88,35 +84,33 @@ type family Interpreter (xs :: [k]) :: (* -> *) -> * where
   Interpreter '[x]      = Exe x
   Interpreter (x ': xs) = Exe x :*: Interpreter xs
 
----
--- | Run a program with the given interpreter.
---
--- @
--- 'run' :: 'Monad' m => 'Interpreter' [t, ...] m -> 'Program' [t, ...] m a -> m a
--- 'run' :: 'Monad' m => 'Interpreter' [t, ...] m -> 'FreeT' ('ProgramF' [t, ...]) m a -> m a
--- 'run' :: 'Monad' m => ('Exe' t :*: ...) m -> 'FreeT' ('InsF' t :+: ...) m a -> m a
--- 'run' :: 'Monad' m => 'Exe' t m -> 'FreeT' ('InsF' t) m a -> m a
--- @
---
--- Notice that the compiler will have trouble inferring @f@ if it was
--- constructed using ':<:'. You should fix @f@ to a particular type.
-run :: (Monad m, Run m f (e m)) => e m -> FreeT f m a -> m a
-run = run_
-
--- | Internal. Run @f@ in @m@ as described by @e@.
+-- | Run @f@ in @m@ as described by @e@.
 class Monad m => Run (m :: * -> *) (f :: * -> *) (e :: *) | e -> m where
-  run_ :: e -> f a -> m a
+  -- | Run @f@ in @m@ as described by @e@.
+  --
+  -- @
+  -- 'run' :: 'Monad' m => 'Interpreter' [t, ...] m -> 'Program' [t, ...] m a -> m a
+  -- 'run' :: 'Monad' m => 'Interpreter' [t, ...] m -> 'FreeT' ('ProgramF' [t, ...]) m a -> m a
+  -- 'run' :: 'Monad' m => ('Exe' t :*: ...) m -> 'FreeT' ('InsF' t :+: ...) m a -> m a
+  -- 'run' :: 'Monad' m => 'Exe' t m -> 'FreeT' ('InsF' t) m a -> m a
+  -- @
+  --
+  -- Notice that the compiler will have trouble inferring @f@ if it was
+  -- constructed using ':<:'. You should fix @f@ to a particular type.
+  run :: e -> f a -> m a
+
 instance Monad m => Run m (InsF t) (Exe t m) where
-  run_ (Exe k) (InsF (a, fr)) = fr <$> k a
+  run (Exe k) (InsF (a, fr)) = fr <$> k a
 instance (Monad m, Run m f (ef m), Run m g (eg m)) => Run m (f :+: g) ((ef :*: eg) m) where
-  run_ (e :*: _) (InL f) = run_ e f
-  run_ (_ :*: e) (InR g) = run_ e g
+  run (e :*: _) (InL f) = run e f
+  run (_ :*: e) (InR g) = run e g
 instance (Monad m, Run m f (e m)) => Run m (FreeT f m) (e m) where
-  run_ e = \f0 -> do
+  run e = \f0 -> do
      x <- runFreeT f0
      case x of
         Pure a -> return a
-        Free f -> run_ e =<< run_ e f
+        Free f -> run e =<< run e f
+
 --------------------------------------------------------------------------------
 
 infixr 6 :+:
@@ -124,16 +118,17 @@ infixr 6 :+:
 --
 -- We will switch to @transformers >= 0.5@ once that version is widely deployed.
 data (f :+: g) a = InL (f a) | InR (g a)
-  deriving (Functor)
+  deriving (Functor, Eq, Ord, Show)
 
 infixr 8 :*:
 -- | Like the poly-kinded 'Data.Functor.Product.Product' from @transformers >= 0.5@.
 --
 -- We will switch to @transformers >= 0.5@ once that version is widely deployed.
 data (f :*: g) a = f a :*: g a
-  deriving (Functor)
+  deriving (Functor, Eq, Ord, Show)
 
 infixl 5 :<:
+-- | @f ':<:' g@ implies that given @f a@ you can construct @g a@.
 class f :<: g where inj :: f a -> g a
 instance f :<: f where inj = id
 instance f :<: (f :+: g) where inj = InL
